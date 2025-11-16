@@ -4,6 +4,7 @@ Generate interactive HTML page from Bhagavad Gita slok JSON files.
 Extracts 'rams.ht' field from each slok and creates a chat-like interface.
 Messages from श्रीभगवान् are hidden by default and can be expanded by clicking.
 Groups consecutive verses with identical (normalized) or highly similar text.
+Strips leading verse prefix markers like '।।2.69।।' or '।।3.1 -- 3.2।।' from displayed commentary text.
 """
 
 import json
@@ -75,6 +76,17 @@ def read_slok_files(slok_dir):
     return slok_data
 
 
+def strip_verse_prefix(text: str) -> str:
+    """Remove leading verse number prefix patterns of form:
+    ।।<chapter>.<verse>।। or ।।<chapter>.<verse> -- <chapter>.<verse>।।
+    Allow optional spaces. Return cleaned text.
+    """
+    if not text:
+        return ''
+    pattern = r'^।।\s*\d+\.\d+(?:\s*(?:--|[-–—])\s*\d+\.\d+)?।।\s*'
+    return re.sub(pattern, '', text.strip())
+
+
 def normalize_text(text: str) -> str:
     """Return a normalized version of commentary text for comparison.
     - Trim
@@ -83,6 +95,8 @@ def normalize_text(text: str) -> str:
     """
     if text is None:
         return ''
+    # Strip verse prefix before normalization so comparisons ignore it
+    text = strip_verse_prefix(text)
     s = text.strip()
     # Collapse whitespace
     s = re.sub(r'\s+', ' ', s)
@@ -434,7 +448,8 @@ def generate_html(slok_data, output_file):
                 f.write(f'            <div class="message arjuna">\n')
                 f.write(f'                <div class="message-content">\n')
                 f.write(f'                    <span class="verse-number">{verse_label}</span>\n')
-                f.write(f'                    {text}\n')
+                cleaned = strip_verse_prefix(text)
+                f.write(f'                    {cleaned}\n')
                 f.write(f'                </div>\n')
                 f.write(f'            </div>\n')
 
@@ -443,7 +458,8 @@ def generate_html(slok_data, output_file):
                 f.write(f'                <div class="message-content hidden" onclick="this.classList.toggle(\'hidden\'); this.querySelector(\'.message-text\').classList.toggle(\'hidden\'); this.querySelector(\'.placeholder\').classList.toggle(\'show\');">\n')
                 f.write(f'                    <span class="verse-number">{verse_label}</span>\n')
                 f.write(f'                    <span class="placeholder show">श्रीभगवान् का उत्तर देखने के लिए क्लिक करें... 🙏</span>\n')
-                f.write(f'                    <span class="message-text hidden">{text}</span>\n')
+                cleaned = strip_verse_prefix(text)
+                f.write(f'                    <span class="message-text hidden">{cleaned}</span>\n')
                 f.write(f'                </div>\n')
                 f.write(f'            </div>\n')
 
@@ -451,7 +467,8 @@ def generate_html(slok_data, output_file):
                 f.write(f'            <div class="message narrator">\n')
                 f.write(f'                <div class="message-content">\n')
                 f.write(f'                    <span class="verse-number">{speaker} - {verse_label}</span>\n')
-                f.write(f'                    {text}\n')
+                cleaned = strip_verse_prefix(text)
+                f.write(f'                    {cleaned}\n')
                 f.write(f'                </div>\n')
                 f.write(f'            </div>\n')
 
@@ -460,7 +477,8 @@ def generate_html(slok_data, output_file):
                 f.write(f'            <div class="message other">\n')
                 f.write(f'                <div class="message-content">\n')
                 f.write(f'                    <span class="verse-number">{speaker_name} - {verse_label}</span>\n')
-                f.write(f'                    {text}\n')
+                cleaned = strip_verse_prefix(text)
+                f.write(f'                    {cleaned}\n')
                 f.write(f'                </div>\n')
                 f.write(f'            </div>\n')
 
