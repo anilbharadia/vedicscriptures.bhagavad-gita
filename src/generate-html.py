@@ -178,26 +178,26 @@ def generate_html(slok_data, output_file):
             display: block;
         }
 
-        /* अर्जुन (Arjuna) - Right aligned, orange */
+        /* अर्जुन (Arjuna) - Left aligned, orange */
         .arjuna {
-            text-align: right;
+            text-align: left;
         }
 
         .arjuna .message-content {
             background: linear-gradient(135deg, #FF9966 0%, #FF5E62 100%);
             color: white;
-            border-bottom-right-radius: 5px;
+            border-bottom-left-radius: 5px;
         }
 
-        /* श्रीभगवान् (Bhagavan) - Left aligned, blue */
+        /* श्रीभगवान् (Bhagavan) - Right aligned, blue */
         .bhagavan {
-            text-align: left;
+            text-align: right;
         }
 
         .bhagavan .message-content {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border-bottom-left-radius: 5px;
+            border-bottom-right-radius: 5px;
             cursor: pointer;
             transition: all 0.3s ease;
         }
