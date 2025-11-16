@@ -82,6 +82,8 @@ def main():
             data = json.load(f, object_pairs_hook=OrderedDict)
         slok = data.get('slok', '')
         detected = detect_prefix(slok)
+        if chap == 1 and verse == 28:
+          detected = 'अर्जुन'
 
         if chap != last_chapter:
             # Reset speaker context at new chapter start unless first slok sets it.
