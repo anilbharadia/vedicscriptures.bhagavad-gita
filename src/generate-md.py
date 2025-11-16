@@ -91,6 +91,7 @@ def generate_markdown(slok_data, output_file):
         f.write("<style>\n")
         f.write(".arjuna { background-color: orange; padding: 5px; border-radius: 3px; }\n")
         f.write(".bhagavan { background-color: lightblue; padding: 5px; border-radius: 3px; }\n")
+        f.write(".narrator { background-color: lightgrey; padding: 5px; border-radius: 3px; }\n")
         f.write("</style>\n\n")
         f.write("---\n\n")
 
@@ -107,6 +108,8 @@ def generate_markdown(slok_data, output_file):
                 f.write(f"- <span class='arjuna'>**{chapter_num}.{slok_num}** {rams_ht}</span>\n")
             elif speaker == "श्रीभगवान्":
                 f.write(f"- <span class='bhagavan'>**{chapter_num}.{slok_num}** {rams_ht}</span>\n")
+            elif speaker == "सञ्जय" or speaker == "धृतराष्ट्र":
+                f.write(f"- <span class='narrator'>**{chapter_num}.{slok_num}** {rams_ht}</span>\n")
             else:
                 # No special styling for other speakers or when speaker is not specified
                 f.write(f"- **{chapter_num}.{slok_num}** {rams_ht}\n")
