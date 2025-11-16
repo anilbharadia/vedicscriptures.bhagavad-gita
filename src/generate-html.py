@@ -3,11 +3,13 @@
 Generate interactive HTML page from Bhagavad Gita slok JSON files.
 Extracts 'rams.ht' field from each slok and creates a chat-like interface.
 Messages from श्रीभगवान् are hidden by default and can be expanded by clicking.
+Groups consecutive verses with identical (normalized) or highly similar text.
 """
 
 import json
 import re
 from pathlib import Path
+from difflib import SequenceMatcher
 
 
 def extract_chapter_slok_numbers(filename):
@@ -73,10 +75,98 @@ def read_slok_files(slok_dir):
     return slok_data
 
 
+def normalize_text(text: str) -> str:
+    """Return a normalized version of commentary text for comparison.
+    - Trim
+    - Collapse all whitespace to single spaces
+    - Remove spaces before common punctuation (Hindi danda '।', ! ? , ; :)
+    """
+    if text is None:
+        return ''
+    s = text.strip()
+    # Collapse whitespace
+    s = re.sub(r'\s+', ' ', s)
+    # Remove space before punctuation marks
+    s = re.sub(r'\s+([!?,।;:])', r'\1', s)
+    return s
+
+
+def strip_for_tokens(text: str) -> str:
+    """Lowercase and remove punctuation for token comparison."""
+    if text is None:
+        return ''
+    t = normalize_text(text)
+    t = re.sub(r'[!?,।;:\-–—]|\[|\]|"|\(|\)|\/', ' ', t)
+    t = re.sub(r'\s+', ' ', t).lower()
+    return t
+
+
+def are_texts_equivalent(a: str, b: str) -> bool:
+    """Return True if two texts are considered equivalent for grouping.
+    Criteria:
+      1. Exact normalized match
+      2. High similarity ratio (>0.965) via SequenceMatcher
+      3. Token symmetric difference very small (<=2 tokens diff) and length diff <=3
+    """
+    na = normalize_text(a)
+    nb = normalize_text(b)
+    if na == nb:
+        return True
+    ratio = SequenceMatcher(None, na, nb).ratio()
+    if ratio > 0.965:
+        return True
+    ta = strip_for_tokens(a).split()
+    tb = strip_for_tokens(b).split()
+    set_a = set(ta)
+    set_b = set(tb)
+    sym_diff = (set_a - set_b) | (set_b - set_a)
+    if len(sym_diff) <= 2 and abs(len(ta) - len(tb)) <= 3:
+        return True
+    return False
+
+
+def group_sloks(slok_data):
+    """Group consecutive sloks within a chapter where normalized rams_ht and speaker are identical.
+
+    Args:
+        slok_data: list of tuples (chapter, verse, text, speaker) sorted by (chapter, verse)
+
+    Returns:
+        list of tuples (chapter, start_verse, end_verse, text, speaker)
+    """
+    if not slok_data:
+        return []
+    grouped = []
+    i = 0
+    n = len(slok_data)
+    while i < n:
+        chap, verse, text, speaker = slok_data[i]
+        start_verse = verse
+        end_verse = verse
+        j = i + 1
+        while j < n:
+            chap_j, verse_j, text_j, speaker_j = slok_data[j]
+            if chap_j == chap and verse_j == end_verse + 1 and speaker_j == speaker and are_texts_equivalent(text, text_j):
+                end_verse = verse_j
+                j += 1
+            else:
+                break
+        grouped.append((chap, start_verse, end_verse, text, speaker))
+        i = j
+    # Debug: report first few multi-verse groups
+    multi = [g for g in grouped if g[1] != g[2]]
+    if multi:
+        print(f"Found {len(multi)} multi-verse grouped messages. Examples:")
+        for example in multi[:8]:
+            print(f"  Chapter {example[0]} verses {example[1]}-{example[2]} speaker={example[4]}")
+    return grouped
+
+
 def generate_html(slok_data, output_file):
     """
     Generate interactive HTML page with chat-like interface for each slok.
     Messages from श्रीभगवान् are hidden by default and expandable.
+    Now groups consecutive identical-text verses into a single message with a range label.
 
     Args:
         slok_data: List of tuples (chapter_num, slok_num, rams_ht_text, speaker)
@@ -84,6 +174,8 @@ def generate_html(slok_data, output_file):
     """
     # Sort by chapter number, then slok number
     slok_data.sort(key=lambda x: (x[0], x[1]))
+    grouped_sloks = group_sloks(slok_data)
+    print(f"Original verses: {len(slok_data)} | Grouped messages: {len(grouped_sloks)}")
 
     with open(output_file, 'w', encoding='utf-8') as f:
         # Write HTML header
@@ -325,48 +417,50 @@ def generate_html(slok_data, output_file):
 
         current_chapter = None
 
-        for chapter_num, slok_num, rams_ht, speaker in slok_data:
+        for chap, start_v, end_v, text, speaker in grouped_sloks:
             # Add chapter header when we encounter a new chapter
-            if current_chapter != chapter_num:
-                current_chapter = chapter_num
-                f.write(f'            <div class="chapter-header">अध्याय {chapter_num}</div>\n')
+            if current_chapter != chap:
+                current_chapter = chap
+                f.write(f'            <div class="chapter-header">अध्याय {chap}</div>\n')
 
-            # Determine message class based on speaker
+            # Compose verse label
+            if start_v == end_v:
+                verse_label = f"{chap}.{start_v}"
+            else:
+                verse_label = f"{chap}.{start_v} - {chap}.{end_v}"
+
+            # Choose class based on speaker
             if speaker == "अर्जुन":
-                msg_class = "arjuna"
-                f.write(f'            <div class="message {msg_class}">\n')
+                f.write(f'            <div class="message arjuna">\n')
                 f.write(f'                <div class="message-content">\n')
-                f.write(f'                    <span class="verse-number">{chapter_num}.{slok_num}</span>\n')
-                f.write(f'                    {rams_ht}\n')
+                f.write(f'                    <span class="verse-number">{verse_label}</span>\n')
+                f.write(f'                    {text}\n')
                 f.write(f'                </div>\n')
                 f.write(f'            </div>\n')
 
             elif speaker == "श्रीभगवान्":
-                msg_class = "bhagavan"
-                f.write(f'            <div class="message {msg_class}">\n')
+                f.write(f'            <div class="message bhagavan">\n')
                 f.write(f'                <div class="message-content hidden" onclick="this.classList.toggle(\'hidden\'); this.querySelector(\'.message-text\').classList.toggle(\'hidden\'); this.querySelector(\'.placeholder\').classList.toggle(\'show\');">\n')
-                f.write(f'                    <span class="verse-number">{chapter_num}.{slok_num}</span>\n')
+                f.write(f'                    <span class="verse-number">{verse_label}</span>\n')
                 f.write(f'                    <span class="placeholder show">श्रीभगवान् का उत्तर देखने के लिए क्लिक करें... 🙏</span>\n')
-                f.write(f'                    <span class="message-text hidden">{rams_ht}</span>\n')
+                f.write(f'                    <span class="message-text hidden">{text}</span>\n')
                 f.write(f'                </div>\n')
                 f.write(f'            </div>\n')
 
             elif speaker == "सञ्जय" or speaker == "धृतराष्ट्र":
-                msg_class = "narrator"
-                f.write(f'            <div class="message {msg_class}">\n')
+                f.write(f'            <div class="message narrator">\n')
                 f.write(f'                <div class="message-content">\n')
-                f.write(f'                    <span class="verse-number">{speaker} - {chapter_num}.{slok_num}</span>\n')
-                f.write(f'                    {rams_ht}\n')
+                f.write(f'                    <span class="verse-number">{speaker} - {verse_label}</span>\n')
+                f.write(f'                    {text}\n')
                 f.write(f'                </div>\n')
                 f.write(f'            </div>\n')
 
             else:
-                msg_class = "other"
                 speaker_name = speaker if speaker else "अन्य"
-                f.write(f'            <div class="message {msg_class}">\n')
+                f.write(f'            <div class="message other">\n')
                 f.write(f'                <div class="message-content">\n')
-                f.write(f'                    <span class="verse-number">{speaker_name} - {chapter_num}.{slok_num}</span>\n')
-                f.write(f'                    {rams_ht}\n')
+                f.write(f'                    <span class="verse-number">{speaker_name} - {verse_label}</span>\n')
+                f.write(f'                    {text}\n')
                 f.write(f'                </div>\n')
                 f.write(f'            </div>\n')
 
@@ -375,7 +469,7 @@ def generate_html(slok_data, output_file):
 
         <div class="footer">
             <p>श्रीमद् भगवद्गीता - स्वामी रामसुखदास जी की व्याख्या</p>
-            <p style="margin-top: 10px; font-size: 0.85em;">Total Verses: """ + str(len(slok_data)) + """</p>
+            <p style="margin-top: 10px; font-size: 0.85em;">Total Verses: """ + str(len(slok_data)) + """ | Messages Displayed: """ + str(len(grouped_sloks)) + """</p>
         </div>
     </div>
 
@@ -397,8 +491,7 @@ def generate_html(slok_data, output_file):
 """)
 
     print(f"Successfully generated {output_file}")
-    print(f"Total sloks processed: {len(slok_data)}")
-
+    print(f"Total sloks processed: {len(slok_data)} | Messages displayed: {len(grouped_sloks)}")
 
 
 def main():
@@ -430,7 +523,5 @@ def main():
     print(f"\nOpen {output_file} in your web browser to view the interactive Bhagavad Gita!")
 
 
-
 if __name__ == "__main__":
     main()
-
