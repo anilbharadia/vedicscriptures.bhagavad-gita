@@ -28,13 +28,13 @@ def extract_chapter_slok_numbers(filename):
 
 def read_slok_files(slok_dir):
     """
-    Read all slok JSON files and extract rams.ht field.
+    Read all slok JSON files and extract rams.ht field and speaker.
 
     Args:
         slok_dir: Path to the directory containing slok JSON files
 
     Returns:
-        List of tuples: (chapter_num, slok_num, rams_ht_text)
+        List of tuples: (chapter_num, slok_num, rams_ht_text, speaker)
     """
     slok_data = []
 
@@ -57,10 +57,11 @@ def read_slok_files(slok_dir):
             with open(json_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
-            # Extract rams.ht field
+            # Extract rams.ht field and speaker
             if 'rams' in data and 'ht' in data['rams']:
                 rams_ht = data['rams']['ht']
-                slok_data.append((chapter_num, slok_num, rams_ht))
+                speaker = data.get('speaker', None)  # Extract speaker, default to None if not present
+                slok_data.append((chapter_num, slok_num, rams_ht, speaker))
             else:
                 print(f"Warning: 'rams.ht' not found in {json_file.name}")
 
@@ -75,9 +76,10 @@ def read_slok_files(slok_dir):
 def generate_markdown(slok_data, output_file):
     """
     Generate markdown file with bullet points for each slok.
+    Applies colored backgrounds based on speaker.
 
     Args:
-        slok_data: List of tuples (chapter_num, slok_num, rams_ht_text)
+        slok_data: List of tuples (chapter_num, slok_num, rams_ht_text, speaker)
         output_file: Path to output markdown file
     """
     # Sort by chapter number, then slok number
@@ -86,18 +88,28 @@ def generate_markdown(slok_data, output_file):
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write("# Bhagavad Gita - Swami Ramsukhdas Commentary\n\n")
         f.write("This document contains the Hindi translation and commentary by Swami Ramsukhdas.\n\n")
+        f.write("<style>\n")
+        f.write(".arjuna { background-color: orange; padding: 5px; border-radius: 3px; }\n")
+        f.write(".bhagavan { background-color: lightblue; padding: 5px; border-radius: 3px; }\n")
+        f.write("</style>\n\n")
         f.write("---\n\n")
 
         current_chapter = None
 
-        for chapter_num, slok_num, rams_ht in slok_data:
+        for chapter_num, slok_num, rams_ht, speaker in slok_data:
             # Add chapter header when we encounter a new chapter
             if current_chapter != chapter_num:
                 current_chapter = chapter_num
                 f.write(f"\n## Chapter {chapter_num}\n\n")
 
-            # Write the slok as a bullet point
-            f.write(f"- **{chapter_num}.{slok_num}** {rams_ht}\n")
+            # Write the slok with appropriate styling based on speaker
+            if speaker == "अर्जुन":
+                f.write(f"- <span class='arjuna'>**{chapter_num}.{slok_num}** {rams_ht}</span>\n")
+            elif speaker == "श्रीभगवान्":
+                f.write(f"- <span class='bhagavan'>**{chapter_num}.{slok_num}** {rams_ht}</span>\n")
+            else:
+                # No special styling for other speakers or when speaker is not specified
+                f.write(f"- **{chapter_num}.{slok_num}** {rams_ht}\n")
 
     print(f"Successfully generated {output_file}")
     print(f"Total sloks processed: {len(slok_data)}")
