@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-Script to add 'speaker' property to JSON files where slok starts with 'श्रीभगवानुवाच'
+Script to add 'speaker' property to JSON files:
+- श्रीभगवान् for sloks starting with 'श्रीभगवानुवाच'
+- अर्जुन for sloks starting with 'अर्जुन उवाच'
 """
 
 import json
@@ -9,14 +11,21 @@ import glob
 from collections import OrderedDict
 
 def add_speaker_to_file(file_path):
-    """Add speaker property to a JSON file if slok starts with श्रीभगवानुवाच"""
+    """Add speaker property to a JSON file if slok starts with श्रीभगवानुवाच or अर्जुन उवाच"""
 
     # Read the file
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f, object_pairs_hook=OrderedDict)
 
-    # Check if slok starts with श्रीभगवानुवाच
-    if 'slok' in data and data['slok'].startswith('श्रीभगवानुवाच'):
+    # Determine speaker based on slok content
+    speaker = None
+    if 'slok' in data:
+        if data['slok'].startswith('श्रीभगवानुवाच'):
+            speaker = 'श्रीभगवान्'
+        elif data['slok'].startswith('अर्जुन उवाच'):
+            speaker = 'अर्जुन'
+
+    if speaker:
         # Check if speaker property already exists
         if 'speaker' not in data:
             # Create a new OrderedDict with speaker inserted before slok
@@ -24,7 +33,7 @@ def add_speaker_to_file(file_path):
             for key, value in data.items():
                 if key == 'slok':
                     # Add speaker before slok
-                    new_data['speaker'] = 'श्रीभगवान्'
+                    new_data['speaker'] = speaker
                 new_data[key] = value
 
             # Write back to file with trailing newline
@@ -32,7 +41,7 @@ def add_speaker_to_file(file_path):
                 json.dump(new_data, f, ensure_ascii=False, indent=4)
                 f.write('\n')  # Preserve the trailing newline
 
-            print(f"✓ Updated: {os.path.basename(file_path)}")
+            print(f"✓ Updated: {os.path.basename(file_path)} - speaker: {speaker}")
             return True
         else:
             print(f"⊘ Skipped (speaker already exists): {os.path.basename(file_path)}")
