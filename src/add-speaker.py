@@ -4,6 +4,7 @@ Script to add 'speaker' property to JSON files:
 - श्रीभगवान् for sloks starting with 'श्रीभगवानुवाच'
 - अर्जुन for sloks starting with 'अर्जुन उवाच'
 - सञ्जय for sloks starting with 'सञ्जय उवाच'
+- धृतराष्ट्र for sloks starting with 'धृतराष्ट्र उवाच'
 """
 
 import json
@@ -12,7 +13,7 @@ import glob
 from collections import OrderedDict
 
 def add_speaker_to_file(file_path):
-    """Add speaker property to a JSON file if slok starts with श्रीभगवानुवाच, अर्जुन उवाच, or सञ्जय उवाच"""
+    """Add speaker property to a JSON file if slok starts with any recognized '... उवाच'"""
 
     # Read the file
     with open(file_path, 'r', encoding='utf-8') as f:
@@ -21,12 +22,15 @@ def add_speaker_to_file(file_path):
     # Determine speaker based on slok content
     speaker = None
     if 'slok' in data:
-        if data['slok'].startswith('श्रीभगवानुवाच'):
+        text = data['slok']
+        if text.startswith('श्रीभगवानुवाच'):
             speaker = 'श्रीभगवान्'
-        elif data['slok'].startswith('अर्जुन उवाच'):
+        elif text.startswith('अर्जुन उवाच'):
             speaker = 'अर्जुन'
-        elif data['slok'].startswith('सञ्जय उवाच'):
+        elif text.startswith('सञ्जय उवाच'):
             speaker = 'सञ्जय'
+        elif text.startswith('धृतराष्ट्र उवाच'):
+            speaker = 'धृतराष्ट्र'
 
     if speaker:
         # Check if speaker property already exists
@@ -69,4 +73,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
