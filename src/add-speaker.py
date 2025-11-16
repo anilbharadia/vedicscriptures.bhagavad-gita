@@ -1,75 +1,109 @@
 #!/usr/bin/env python3
 """
-Script to add 'speaker' property to JSON files:
-- श्रीभगवान् for sloks starting with 'श्रीभगवानुवाच'
-- अर्जुन for sloks starting with 'अर्जुन उवाच'
-- सञ्जय for sloks starting with 'सञ्जय उवाच'
-- धृतराष्ट्र for sloks starting with 'धृतराष्ट्र उवाच'
+Simplified script to add missing 'speaker' properties based solely on explicit prefixes.
+Adds speaker if slok's first line starts with one of:
+- 'श्रीभगवानुवाच' -> 'श्रीभगवान्'
+- 'अर्जुन उवाच'   -> 'अर्जुन'
+- 'सञ्जय उवाच'    -> 'सञ्जय'
+- 'धृतराष्ट्र उवाच' -> 'धृतराष्ट्र'
+
+Behavior:
+- If speaker already present and matches detected prefix, leave unchanged.
+- If speaker present but differs from detected prefix AND --fix is passed, correct it.
+- If speaker absent and prefix detected, insert speaker immediately before 'slok'.
+- Does NOT propagate speakers across verses; use recompute_speakers.py for normalization.
+
+Output: per-file action + final summary counts.
 """
 
 import json
 import os
 import glob
+import argparse
 from collections import OrderedDict
 
-def add_speaker_to_file(file_path):
-    """Add speaker property to a JSON file if slok starts with any recognized '... उवाच'"""
+PREFIX_MAP = {
+    'श्रीभगवानुवाच': 'श्रीभगवान्',
+    'अर्जुन उवाच': 'अर्जुन',
+    'सञ्जय उवाच': 'सञ्जय',
+    'धृतराष्ट्र उवाच': 'धृतराष्ट्र',
+}
 
-    # Read the file
-    with open(file_path, 'r', encoding='utf-8') as f:
+def first_line(slok: str | None) -> str:
+    if not slok:
+        return ''
+    return slok.split('\n', 1)[0].strip()
+
+def detect(slok: str) -> str | None:
+    fl = first_line(slok)
+    for prefix, speaker in PREFIX_MAP.items():
+        if fl.startswith(prefix):
+            return speaker
+    return None
+
+def insert_speaker(data: OrderedDict, speaker: str) -> OrderedDict:
+    new_data = OrderedDict()
+    for k, v in data.items():
+        if k == 'speaker':
+            continue  # drop old, will reinsert
+        if k == 'slok':
+            new_data['speaker'] = speaker
+        new_data[k] = v
+    return new_data
+
+def process_file(path: str, fix: bool, counters: dict):
+    with open(path, 'r', encoding='utf-8') as f:
         data = json.load(f, object_pairs_hook=OrderedDict)
 
-    # Determine speaker based on slok content
-    speaker = None
-    if 'slok' in data:
-        text = data['slok']
-        if text.startswith('श्रीभगवानुवाच'):
-            speaker = 'श्रीभगवान्'
-        elif text.startswith('अर्जुन उवाच'):
-            speaker = 'अर्जुन'
-        elif text.startswith('सञ्जय उवाच'):
-            speaker = 'सञ्जय'
-        elif text.startswith('धृतराष्ट्र उवाच'):
-            speaker = 'धृतराष्ट्र'
+    slok_text = data.get('slok', '')
+    detected = detect(slok_text)
+    existing = data.get('speaker')
+    action = 'skip'
 
-    if speaker:
-        # Check if speaker property already exists
-        if 'speaker' not in data:
-            # Create a new OrderedDict with speaker inserted before slok
-            new_data = OrderedDict()
-            for key, value in data.items():
-                if key == 'slok':
-                    # Add speaker before slok
-                    new_data['speaker'] = speaker
-                new_data[key] = value
-
-            # Write back to file with trailing newline
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(new_data, f, ensure_ascii=False, indent=4)
-                f.write('\n')  # Preserve the trailing newline
-
-            print(f"✓ Updated: {os.path.basename(file_path)} - speaker: {speaker}")
-            return True
+    if detected:
+        if existing is None:
+            # Add speaker
+            data = insert_speaker(data, detected)
+            action = 'add'
+        elif existing != detected:
+            if fix:
+                data = insert_speaker(data, detected)
+                action = 'fix'
+            else:
+                action = 'mismatch'
         else:
-            print(f"⊘ Skipped (speaker already exists): {os.path.basename(file_path)}")
-            return False
+            action = 'match'
     else:
-        print(f"- Skipped (no matching slok): {os.path.basename(file_path)}")
-        return False
+        action = 'none'
+
+    if action in {'add', 'fix'}:
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+            f.write('\n')
+    counters[action] = counters.get(action, 0) + 1
+
+    print(f"{action:8} {os.path.basename(path)} -> {existing or '∅'} / {detected or '∅'}")
+
+def summarize(counters: dict):
+    print("\nSummary:")
+    for k in sorted(counters.keys()):
+        print(f"  {k:8}: {counters[k]}")
+
 
 def main():
-    # Get all JSON files in the slok directory
-    slok_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'slok')
-    json_files = glob.glob(os.path.join(slok_dir, '*.json'))
+    parser = argparse.ArgumentParser(description='Add speaker fields based on explicit prefixes.')
+    parser.add_argument('--dir', default=os.path.join(os.path.dirname(os.path.dirname(__file__)), 'slok'), help='Directory containing slok JSON files')
+    parser.add_argument('--fix', action='store_true', help='Correct mismatched existing speaker values')
+    args = parser.parse_args()
 
-    print(f"Processing {len(json_files)} JSON files in {slok_dir}...\n")
+    json_files = sorted(glob.glob(os.path.join(args.dir, '*.json')))
+    print(f"Scanning {len(json_files)} files in {args.dir}\n")
 
-    updated_count = 0
-    for file_path in sorted(json_files):
-        if add_speaker_to_file(file_path):
-            updated_count += 1
+    counters: dict = {}
+    for path in json_files:
+        process_file(path, args.fix, counters)
 
-    print(f"\n✓ Done! Updated {updated_count} files.")
+    summarize(counters)
 
 if __name__ == '__main__':
     main()
