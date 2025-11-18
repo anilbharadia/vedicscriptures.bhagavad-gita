@@ -2,7 +2,6 @@
 """
 Generate interactive HTML page from Bhagavad Gita slok JSON files.
 Extracts 'rams.ht' field from each slok and creates a chat-like interface.
-Messages from श्रीभगवान् are hidden by default and can be expanded by clicking.
 Groups consecutive verses with identical (normalized) or highly similar text.
 Strips leading verse prefix markers like '।।2.69।।' or '।।3.1 -- 3.2।।' from displayed commentary text.
 """
@@ -179,8 +178,7 @@ def group_sloks(slok_data):
 def generate_html(slok_data, output_file):
     """
     Generate interactive HTML page with chat-like interface for each slok.
-    Messages from श्रीभगवान् are hidden by default and expandable.
-    Now groups consecutive identical-text verses into a single message with a range label.
+    Groups consecutive identical-text verses into a single message with a range label.
 
     Args:
         slok_data: List of tuples (chapter_num, slok_num, rams_ht_text, speaker)
@@ -304,43 +302,6 @@ def generate_html(slok_data, output_file):
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border-bottom-right-radius: 5px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .bhagavan .message-content:hover {
-            transform: scale(1.02);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        }
-
-        .bhagavan .message-content.hidden {
-            background: linear-gradient(135deg, #a8b5ea 0%, #b89fd2 100%);
-            opacity: 0.6;
-        }
-
-        .bhagavan .message-text {
-            display: block;
-        }
-
-        .bhagavan .message-text.hidden {
-            display: none;
-        }
-
-        .bhagavan .placeholder {
-            display: none;
-            font-style: italic;
-            opacity: 0.9;
-        }
-
-        .bhagavan .placeholder.show {
-            display: block;
-        }
-
-        .click-hint {
-            font-size: 0.85em;
-            opacity: 0.8;
-            margin-top: 5px;
-            font-style: italic;
         }
 
         /* सञ्जय and धृतराष्ट्र (Narrator) - Centered, grey */
@@ -401,6 +362,14 @@ def generate_html(slok_data, output_file):
             margin-right: 8px;
             vertical-align: middle;
         }
+
+        .chapter-header { cursor: pointer; position: relative; user-select: none; }
+        .chapter-header .triangle { font-weight: bold; margin-right: 8px; display: inline-block; width: 1em; }
+        .chapter-block.collapsed .chapter-content { display: none; }
+        .chapter-block.expanded .chapter-content { display: block; }
+        .chapter-block { margin-bottom: 10px; border: 1px solid #ddd; border-radius: 10px; overflow: hidden; background: #ffffff; }
+        .chapter-block .chapter-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 12px 16px; font-size: 1.1em; }
+        .chapter-content { padding: 10px 25px 25px 25px; background: #f5f5f5; }
     </style>
 </head>
 <body>
@@ -418,7 +387,7 @@ def generate_html(slok_data, output_file):
             </div>
             <div class="legend-item">
                 <span class="legend-color" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);"></span>
-                श्रीभगवान् (Lord Krishna) - <em>Click to reveal</em>
+                श्रीभगवान् (Lord Krishna)
             </div>
             <div class="legend-item">
                 <span class="legend-color" style="background: linear-gradient(135deg, #bdc3c7 0%, #95a5a6 100%);"></span>
@@ -430,76 +399,101 @@ def generate_html(slok_data, output_file):
 """)
 
         current_chapter = None
+        # Track if a chapter block is open
+        open_block = False
 
         for chap, start_v, end_v, text, speaker in grouped_sloks:
-            # Add chapter header when we encounter a new chapter
             if current_chapter != chap:
+                # Close previous chapter block if open
+                if open_block:
+                    f.write("                </div>\n            </div>\n")  # close chapter-content and chapter-block
+                    open_block = False
                 current_chapter = chap
-                f.write(f'            <div class="chapter-header">अध्याय {chap}</div>\n')
+                # Start new chapter block (collapsed by default)
+                f.write(f"            <div class=\"chapter-block collapsed\" data-chapter=\"{chap}\">\n")
+                f.write(f"                <div class=\"chapter-header\" onclick=\"toggleChapter(this)\"><span class=\"triangle\">►</span> अध्याय {chap}</div>\n")
+                f.write("                <div class=\"chapter-content\">\n")
+                open_block = True
 
             # Compose verse label
-            if start_v == end_v:
-                verse_label = f"{chap}.{start_v}"
-            else:
-                verse_label = f"{chap}.{start_v} - {chap}.{end_v}"
+            verse_label = f"{chap}.{start_v}" if start_v == end_v else f"{chap}.{start_v} - {chap}.{end_v}"
+            cleaned = strip_verse_prefix(text)
 
-            # Choose class based on speaker
             if speaker == "अर्जुन":
-                f.write(f'            <div class="message arjuna">\n')
-                f.write(f'                <div class="message-content">\n')
-                f.write(f'                    <span class="verse-number">{verse_label}</span>\n')
-                cleaned = strip_verse_prefix(text)
-                f.write(f'                    {cleaned}\n')
-                f.write(f'                </div>\n')
-                f.write(f'            </div>\n')
+                f.write('                    <div class="message arjuna">\n')
+                f.write('                        <div class="message-content">\n')
+                f.write(f'                            <span class="verse-number">{verse_label}</span>\n')
+                f.write(f'                            {cleaned}\n')
+                f.write('                        </div>\n')
+                f.write('                    </div>\n')
 
             elif speaker == "श्रीभगवान्":
-                f.write(f'            <div class="message bhagavan">\n')
-                f.write(f'                <div class="message-content hidden" onclick="this.classList.toggle(\'hidden\'); this.querySelector(\'.message-text\').classList.toggle(\'hidden\'); this.querySelector(\'.placeholder\').classList.toggle(\'show\');">\n')
-                f.write(f'                    <span class="verse-number">{verse_label}</span>\n')
-                f.write(f'                    <span class="placeholder show">श्रीभगवान् का उत्तर देखने के लिए क्लिक करें... 🙏</span>\n')
-                cleaned = strip_verse_prefix(text)
-                f.write(f'                    <span class="message-text hidden">{cleaned}</span>\n')
-                f.write(f'                </div>\n')
-                f.write(f'            </div>\n')
+                f.write('                    <div class="message bhagavan">\n')
+                f.write('                        <div class="message-content">\n')
+                f.write(f'                            <span class="verse-number">{verse_label}</span>\n')
+                f.write(f'                            {cleaned}\n')
+                f.write('                        </div>\n')
+                f.write('                    </div>\n')
 
             elif speaker == "सञ्जय" or speaker == "धृतराष्ट्र":
-                f.write(f'            <div class="message narrator">\n')
-                f.write(f'                <div class="message-content">\n')
-                f.write(f'                    <span class="verse-number">{speaker} - {verse_label}</span>\n')
-                cleaned = strip_verse_prefix(text)
-                f.write(f'                    {cleaned}\n')
-                f.write(f'                </div>\n')
-                f.write(f'            </div>\n')
+                f.write('                    <div class="message narrator">\n')
+                f.write('                        <div class="message-content">\n')
+                f.write(f'                            <span class="verse-number">{speaker} - {verse_label}</span>\n')
+                f.write(f'                            {cleaned}\n')
+                f.write('                        </div>\n')
+                f.write('                    </div>\n')
 
             else:
                 speaker_name = speaker if speaker else "अन्य"
-                f.write(f'            <div class="message other">\n')
-                f.write(f'                <div class="message-content">\n')
-                f.write(f'                    <span class="verse-number">{speaker_name} - {verse_label}</span>\n')
-                cleaned = strip_verse_prefix(text)
-                f.write(f'                    {cleaned}\n')
-                f.write(f'                </div>\n')
-                f.write(f'            </div>\n')
+                f.write('                    <div class="message other">\n')
+                f.write('                        <div class="message-content">\n')
+                f.write(f'                            <span class="verse-number">{speaker_name} - {verse_label}</span>\n')
+                f.write(f'                            {cleaned}\n')
+                f.write('                        </div>\n')
+                f.write('                    </div>\n')
 
-        # Write HTML footer
+        # Close any open chapter block
+        if open_block:
+            f.write("                </div>\n            </div>\n")
+
         f.write("""        </div>
-
         <div class="footer">
             <p>श्रीमद् भगवद्गीता - स्वामी रामसुखदास जी की व्याख्या</p>
             <p style="margin-top: 10px; font-size: 0.85em;">Total Verses: """ + str(len(slok_data)) + """ | Messages Displayed: """ + str(len(grouped_sloks)) + """</p>
         </div>
     </div>
-
     <script>
-        // Optional: Add keyboard shortcut to reveal all hidden messages
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'r' && e.ctrlKey) {
-                e.preventDefault();
-                document.querySelectorAll('.bhagavan .message-content.hidden').forEach(el => {
-                    el.classList.remove('hidden');
-                    el.querySelector('.message-text').classList.remove('hidden');
-                    el.querySelector('.placeholder').classList.remove('show');
+        function toggleChapter(header){
+            const block = header.parentElement;
+            const content = block.querySelector('.chapter-content');
+            const tri = header.querySelector('.triangle');
+            const collapsed = block.classList.contains('collapsed');
+            if(collapsed){
+                block.classList.remove('collapsed');
+                block.classList.add('expanded');
+                content.style.display='block';
+                tri.textContent='▼';
+            } else {
+                block.classList.add('collapsed');
+                block.classList.remove('expanded');
+                content.style.display='none';
+                tri.textContent='►';
+            }
+        }
+        // Keyboard shortcut: Ctrl+Shift+E expand all, Ctrl+Shift+C collapse all
+        document.addEventListener('keydown', function(e){
+            if(e.ctrlKey && e.shiftKey && e.key.toLowerCase()==='e'){
+                document.querySelectorAll('.chapter-block.collapsed').forEach(b=>{
+                    b.classList.remove('collapsed'); b.classList.add('expanded');
+                    b.querySelector('.chapter-content').style.display='block';
+                    b.querySelector('.triangle').textContent='▼';
+                });
+            }
+            if(e.ctrlKey && e.shiftKey && e.key.toLowerCase()==='c'){
+                document.querySelectorAll('.chapter-block.expanded').forEach(b=>{
+                    b.classList.add('collapsed'); b.classList.remove('expanded');
+                    b.querySelector('.chapter-content').style.display='none';
+                    b.querySelector('.triangle').textContent='►';
                 });
             }
         });
